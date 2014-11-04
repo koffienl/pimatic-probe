@@ -15,6 +15,7 @@ v 0.3    Added DHT11 humidity transmit
 v 0.4    Changed to pimatic_generic protocol
 v 0.4.1  Changed timings: https://github.com/pimatic/pimatic/issues/74#issuecomment-60989449 
 v 0.4.2  Changed transmit() function with argument number of repeats
+v 0.5    Add NewRemoteSwitch (KaKu) libraries for retransmitting
 
 
  * Generic Sender code : Send a value (counter) over RF 433.92 mhz
