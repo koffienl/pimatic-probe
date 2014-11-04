@@ -1,6 +1,6 @@
 /*
                  Arduino Nano V3
-	  _____
+                     _______
   RX             D0 -|  N  |- 
   TX             D1 -|  A  |-             GND
   RESET             -|  N  |-             RESET
