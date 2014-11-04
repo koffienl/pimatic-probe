@@ -4,7 +4,7 @@
   RX             D0 -|  N  |- 
   TX             D1 -|  A  |-             GND
   RESET             -|  N  |-             RESET
-  GND               -|  O  |-	  5V
+  GND               -|  O  |-   	  5V
   receive        D2 -|     |- A7
                  D3 -|  V  |- A6      
   transmit       D4 -|  3  |- A5          SCL
