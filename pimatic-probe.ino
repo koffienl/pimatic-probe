@@ -1,13 +1,21 @@
 /*
-                    ATtiny 84
-                      _____
-                VCC -|  A  |- GND
-                 D1 -|  T  |- A0, D10     RF Transmitter
-                    -|  t  |- A1, D9      DS18B20
-  RESET             -|  i  |- A2, D8      LED
-  DHT11          D2 -|  n  |- A3, D7
-             A7, D3 -|  y  |- A4, D6      CLOCK
-   MOSI      A6, D4 -|_____|- A5, D5      MISO
+                 Arduino Nano V3
+	  _____
+  RX             D0 -|  N  |- 
+  TX             D1 -|  A  |-             GND
+  RESET             -|  N  |-             RESET
+  GND               -|  O  |-	  5V
+  receive        D2 -|     |- A7
+                 D3 -|  V  |- A6      
+  transmit       D4 -|  3  |- A5          SCL
+  DS18B20        D5 -|     |- A4          SDA
+                 D6 -|     |- A3      
+                 D7 -|     |- A2      
+  LED            D8 -|     |- A1      
+  DHT11          D9 -|     |- A0      			 
+  SS            D10 -|     |-             AREF
+  MOSI          D11 -|     |-             3.3V			
+  MISO          D12 -|_____|- D13         LED/SCK
 
 v 0.1    Read temperature from DS18B20 and broadcast with KaKu_dim protocol
 v 0.2    Changed protocol KaKu_dim to Probe protocol
@@ -16,6 +24,7 @@ v 0.4    Changed to pimatic_generic protocol
 v 0.4.1  Changed timings: https://github.com/pimatic/pimatic/issues/74#issuecomment-60989449 
 v 0.4.2  Changed transmit() function with argument number of repeats
 v 0.5    Add NewRemoteSwitch (KaKu) libraries for retransmitting
+v 0.6    Changed Attiny drawing to Nano and changed pin's
 
 
  * Generic Sender code : Send a value (counter) over RF 433.92 mhz
@@ -35,10 +44,10 @@ v 0.5    Add NewRemoteSwitch (KaKu) libraries for retransmitting
 #include <dht.h> // http://playground.arduino.cc/Main/DHTLib#.UyMXevldWCQ
 
 // Define vars
-#define DHT11_PIN 2
-#define senderPin 10
+#define DHT11_PIN 9
+#define senderPin 4
 const int ledPin = 8; // LED PIN
-#define ONE_WIRE_BUS 9 // DS18B20 PIN
+#define ONE_WIRE_BUS 5 // DS18B20 PIN
 
 long codeKit = 1000;  // Your unique ID for your Arduino node
 int Bytes[30]; 
