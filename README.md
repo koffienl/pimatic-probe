@@ -1,4 +1,4 @@
 pimatic-probe
 =============
 
-Wireless sensor box for pimatic
+Wireless sensor box for pimatic.
