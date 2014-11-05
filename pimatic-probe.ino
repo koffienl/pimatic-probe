@@ -64,6 +64,50 @@ OneWire oneWire(ONE_WIRE_BUS); // Setup a oneWire instance
 DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Temperature
 dht DHT;
 
+void setup()
+{
+  pinMode(senderPin, OUTPUT);
+  pinMode(ledPin, OUTPUT);
+  buildSignal();
+
+  // Initialize receiver on interrupt 0 (= digital pin 2), calls the callback "showCode"
+  // after 2 identical codes have been received in a row. (thus, keep the button pressed
+  // for a moment)
+  //
+  // See the interrupt-parameter of attachInterrupt for possible values (and pins)
+  // to connect the receiver.
+  NewRemoteReceiver::init(0, 2, retransmit);
+
+}
+
+void loop()
+{
+ // Read DS18B20 and transmit value as sensor 1
+ float temperature;
+ sensors.begin(); //start up temp sensor
+ sensors.requestTemperatures(); // Get the temperature
+ temperature = sensors.getTempCByIndex(0); // Get temperature in Celcius
+ unsigned long CounterValue = temperature * 10;
+ Blink(ledPin,2);  
+ int BytesType[] = {0,0,0,1};
+ transmit(true, CounterValue, BytesType, 6);
+ delay(5000);
+
+ // Read DHT11 and transmit value as sensor 2
+ int chk = DHT.read11(DHT11_PIN);
+ switch (chk)
+ {
+  case DHTLIB_OK:
+   float humfloat = DHT.humidity;
+   int CounterValue = humfloat * 10;
+   Blink(ledPin,2); 
+   int BytesType[] = {0,0,1,0};
+   transmit(true, CounterValue, BytesType, 6);
+   break;
+ }
+ delay(60000);
+} 
+
 void itob(unsigned long integer, int length)
 {  
  for (int i=0; i<length; i++){
@@ -73,6 +117,50 @@ void itob(unsigned long integer, int length)
    }
    else Bytes[i]=0;
  }
+}
+
+// Callback function is called only when a valid code is received.
+void retransmit(NewRemoteCode receivedCode) {
+  /*
+  receivedCode.address      -> ID
+  receivedCode.unit         -> unit
+  receivedCode.period       -> µs (microseconds)
+  receivedCode.switchType   -> on/off/dimlevel
+  receivedCode.groupBit     -> group command
+  */
+
+  // Disable the receiver; otherwise it might pick up the retransmit as well.
+  NewRemoteReceiver::disable();
+
+  // Need interrupts for delay()
+  interrupts();
+
+  // Wait 1 second before sending.
+  delay(1000);
+
+  // retransmit KaKu doorcontact 13040182-9 (tuindeur) as 101010-0
+  if (receivedCode.address == 8934706 && receivedCode.unit == 9) {  
+      Serial.print("Proxy!");
+      NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
+      transmitter.sendUnit(0, receivedCode.switchType);
+  }
+  
+  // retransmit KaKu sender 12691134-1 (bijkeuken verlichting) as 101010-1
+  if (receivedCode.address == 12691134 && receivedCode.unit == 1) {  
+      Serial.print("Proxy!");
+      NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
+      transmitter.sendUnit(1, receivedCode.switchType);
+  }  
+
+  // retransmit KaKu sender 11221182-9 (Elise verlichting) as 101010-2
+  if (receivedCode.address == 11221182 && receivedCode.unit == 9) {  
+      Serial.print("Proxy!");
+      NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
+      transmitter.sendUnit(2, receivedCode.switchType);
+  }  
+  
+  // Enable the receiver.
+  NewRemoteReceiver::enable();
 }
 
 void itobCounter(unsigned long integer, int length)
@@ -182,93 +270,6 @@ void transmit(boolean positive, unsigned long Counter, int BytesType[], int repe
  }
 }
 
-
-
-
-
-void transmitOLD(boolean positive, unsigned long Counter, int BytesType[])
-{
- int i;
- itobCounter(Counter, 30);
-
- // Send the unique ID of your Arduino node
- for(i=0; i<14;i++)
- {
-   sendPair(Bytes[i]);
- }
-
- // Send protocol type
- for(int j = 0; j<4; j++)
- {
-   sendPair(BytesType[j]);
- }
-
- // Send the flag to mark the value as positive or negative
- sendPair(positive);
-
- // Send value (ie your counter)
- for(int j = 0; j<30; j++)
- {
-   sendPair(BytesData[j]);
- }
-
- // Send the flag "End of the transmission"
- digitalWrite(senderPin, HIGH);
- delayMicroseconds(650);     
- digitalWrite(senderPin, LOW);
- delayMicroseconds(8602);
-
-}
-
-
-
-
-
-
- void setup()
-{
-  pinMode(senderPin, OUTPUT);
-  pinMode(ledPin, OUTPUT);
-  buildSignal();
-
-  // Initialize receiver on interrupt 0 (= digital pin 2), calls the callback "showCode"
-  // after 2 identical codes have been received in a row. (thus, keep the button pressed
-  // for a moment)
-  //
-  // See the interrupt-parameter of attachInterrupt for possible values (and pins)
-  // to connect the receiver.
-  NewRemoteReceiver::init(0, 2, retransmit);
-
-}
-
-void loop()
-{
- // Read DS18B20 and transmit value as sensor 1
- float temperature;
- sensors.begin(); //start up temp sensor
- sensors.requestTemperatures(); // Get the temperature
- temperature = sensors.getTempCByIndex(0); // Get temperature in Celcius
- unsigned long CounterValue = temperature * 10;
- Blink(ledPin,2);  
- int BytesType[] = {0,0,0,1};
- transmit(true, CounterValue, BytesType, 6);
- delay(5000);
-
- // Read DHT11 and transmit value as sensor 2
- int chk = DHT.read11(DHT11_PIN);
- switch (chk)
- {
-  case DHTLIB_OK:
-   float humfloat = DHT.humidity;
-   int CounterValue = humfloat * 10;
-   Blink(ledPin,2); 
-   int BytesType[] = {0,0,1,0};
-   transmit(true, CounterValue, BytesType, 6);
-   break;
- }
- delay(60000);
-} 
-
 void Blink(int led, int times)
 {
  for (int i=0; i< times; i++)
@@ -280,67 +281,6 @@ void Blink(int led, int times)
  }
 }
 
-// Callback function is called only when a valid code is received.
-void retransmit(NewRemoteCode receivedCode) {
-  // Note: interrupts are disabled. You can re-enable them if needed.
-  
-  /*
-  receivedCode.address      -> ID
-  receivedCode.unit         -> unit
-  receivedCode.period       -> µs (microseconds)
-  receivedCode.switchType   -> on/off/dimlevel
-  receivedCode.groupBit     -> group command
-  */
 
-  // retransmit KaKu doorcontact 13040182-9 (tuindeur) as 101010-0
-  if (receivedCode.address == 8934706 && receivedCode.unit == 9) {  
-      Serial.print("Proxy!");
-      NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
-      transmitter.sendUnit(0, receivedCode.switchType);
-  }
-  
-  // retransmit KaKu sender 12691134-1 (bijkeuken verlichting) as 101010-1
-  if (receivedCode.address == 12691134 && receivedCode.unit == 1) {  
-      Serial.print("Proxy!");
-      NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
-      transmitter.sendUnit(1, receivedCode.switchType);
-  }  
-
-  // retransmit KaKu sender 11221182-9 (Elise verlichting) as 101010-2
-  if (receivedCode.address == 11221182 && receivedCode.unit == 9) {  
-      Serial.print("Proxy!");
-      NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
-      transmitter.sendUnit(2, receivedCode.switchType);
-  }  
-
-  
-  // Print the received code.
-  Serial.print("Addr ");
-  Serial.print(receivedCode.address);
-  
-  if (receivedCode.groupBit) {
-    Serial.print(" group");
-  } else {
-    Serial.print(" unit ");
-    Serial.print(receivedCode.unit);
-  }
-  
-  switch (receivedCode.switchType) {
-    case 0:
-      Serial.print(" off");
-      break;
-    case 1:
-      Serial.print(" on");
-      break;
-    case 2:
-      Serial.print(" dim level");
-      Serial.print(receivedCode.dimLevel);
-      break;
-  }
-  
-  Serial.print(", period: ");
-  Serial.print(receivedCode.period);
-  Serial.println("us.");
-}
 
 
