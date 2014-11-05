@@ -69,22 +69,17 @@ void setup()
   pinMode(senderPin, OUTPUT);
   pinMode(ledPin, OUTPUT);
   buildSignal();
+  
+  sensors.begin(); //start up temp sensor
 
-  // Initialize receiver on interrupt 0 (= digital pin 2), calls the callback "showCode"
-  // after 2 identical codes have been received in a row. (thus, keep the button pressed
-  // for a moment)
-  //
-  // See the interrupt-parameter of attachInterrupt for possible values (and pins)
-  // to connect the receiver.
+  // Initialize receiver on interrupt 0 (= digital pin 2), calls the callback "retransmit"
   NewRemoteReceiver::init(0, 2, retransmit);
-
 }
 
 void loop()
 {
  // Read DS18B20 and transmit value as sensor 1
  float temperature;
- sensors.begin(); //start up temp sensor
  sensors.requestTemperatures(); // Get the temperature
  temperature = sensors.getTempCByIndex(0); // Get temperature in Celcius
  unsigned long CounterValue = temperature * 10;
