@@ -1,0 +1,69 @@
+/*
+* Demo for RF remote switch receiver. 
+* This example is for the new KaKu / Home Easy type of remotes!
+
+* For details, see NewRemoteReceiver.h!
+*
+* This sketch shows the received signals on the serial port.
+* Connect the receiver to digital pin 2.
+*/
+
+#include <NewRemoteReceiver.h>
+#include <NewRemoteTransmitter.h>
+
+void setup() {
+  Serial.begin(115200);
+  
+  // Initialize receiver on interrupt 0 (= digital pin 2), calls the callback "showCode"
+  // after 2 identical codes have been received in a row. (thus, keep the button pressed
+  // for a moment)
+  //
+  // See the interrupt-parameter of attachInterrupt for possible values (and pins)
+  // to connect the receiver.
+  NewRemoteReceiver::init(0, 2, showCode);
+}
+
+void loop() {
+//    Serial.print("1 minuut wachten");
+//    delay (60000);
+}
+
+// Callback function is called only when a valid code is received.
+void showCode(NewRemoteCode receivedCode) {
+  // Note: interrupts are disabled. You can re-enable them if needed.
+  
+  if (receivedCode.address == 8934706 && receivedCode.unit == 0) {  
+      Serial.print("Proxy!");
+      NewRemoteTransmitter transmitter(8934707, 4, receivedCode.period);    
+      transmitter.sendUnit(receivedCode.unit, receivedCode.switchType);
+  }
+  
+  // Print the received code.
+  Serial.print("Addr ");
+  Serial.print(receivedCode.address);
+  
+  if (receivedCode.groupBit) {
+    Serial.print(" group");
+  } else {
+    Serial.print(" unit ");
+    Serial.print(receivedCode.unit);
+  }
+  
+  switch (receivedCode.switchType) {
+    case 0:
+      Serial.print(" off");
+      break;
+    case 1:
+      Serial.print(" on");
+      break;
+    case 2:
+      Serial.print(" dim level");
+      Serial.print(receivedCode.dimLevel);
+      break;
+  }
+  
+  Serial.print(", period: ");
+  Serial.print(receivedCode.period);
+  Serial.println("us.");
+}
+

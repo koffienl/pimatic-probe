@@ -25,6 +25,7 @@ v 0.4.1  Changed timings: https://github.com/pimatic/pimatic/issues/74#issuecomm
 v 0.4.2  Changed transmit() function with argument number of repeats
 v 0.5    Add NewRemoteSwitch (KaKu) libraries for retransmitting
 v 0.6    Changed Attiny drawing to Nano and changed pin's
+v 0.7    Added KaKu retransmit as proxy
 
 
  * Generic Sender code : Send a value (counter) over RF 433.92 mhz
@@ -42,12 +43,17 @@ v 0.6    Changed Attiny drawing to Nano and changed pin's
 #include <OneWire.h> // http://www.pjrc.com/teensy/arduino_libraries/OneWire.zip
 #include <DallasTemperature.h> // http://download.milesburton.com/Arduino/MaximTemperature/DallasTemperature_LATEST.zip
 #include <dht.h> // http://playground.arduino.cc/Main/DHTLib#.UyMXevldWCQ
+#include <NewRemoteReceiver.h>
+#include <NewRemoteTransmitter.h>
+
 
 // Define vars
 #define DHT11_PIN 9
 #define senderPin 4
 const int ledPin = 8; // LED PIN
 #define ONE_WIRE_BUS 5 // DS18B20 PIN
+
+#define rxPin 2   // RF RECEIVER PIN
 
 long codeKit = 1000;  // Your unique ID for your Arduino node
 int Bytes[30]; 
@@ -224,6 +230,15 @@ void transmitOLD(boolean positive, unsigned long Counter, int BytesType[])
   pinMode(senderPin, OUTPUT);
   pinMode(ledPin, OUTPUT);
   buildSignal();
+
+  // Initialize receiver on interrupt 0 (= digital pin 2), calls the callback "showCode"
+  // after 2 identical codes have been received in a row. (thus, keep the button pressed
+  // for a moment)
+  //
+  // See the interrupt-parameter of attachInterrupt for possible values (and pins)
+  // to connect the receiver.
+  NewRemoteReceiver::init(0, 2, retransmit);
+
 }
 
 void loop()
@@ -264,3 +279,68 @@ void Blink(int led, int times)
   delay (50);
  }
 }
+
+// Callback function is called only when a valid code is received.
+void retransmit(NewRemoteCode receivedCode) {
+  // Note: interrupts are disabled. You can re-enable them if needed.
+  
+  /*
+  receivedCode.address      -> ID
+  receivedCode.unit         -> unit
+  receivedCode.period       -> µs (microseconds)
+  receivedCode.switchType   -> on/off/dimlevel
+  receivedCode.groupBit     -> group command
+  */
+
+  // retransmit KaKu doorcontact 13040182-9 (tuindeur) as 101010-0
+  if (receivedCode.address == 8934706 && receivedCode.unit == 9) {  
+      Serial.print("Proxy!");
+      NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
+      transmitter.sendUnit(0, receivedCode.switchType);
+  }
+  
+  // retransmit KaKu sender 12691134-1 (bijkeuken verlichting) as 101010-1
+  if (receivedCode.address == 12691134 && receivedCode.unit == 1) {  
+      Serial.print("Proxy!");
+      NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
+      transmitter.sendUnit(1, receivedCode.switchType);
+  }  
+
+  // retransmit KaKu sender 11221182-9 (Elise verlichting) as 101010-2
+  if (receivedCode.address == 11221182 && receivedCode.unit == 9) {  
+      Serial.print("Proxy!");
+      NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
+      transmitter.sendUnit(2, receivedCode.switchType);
+  }  
+
+  
+  // Print the received code.
+  Serial.print("Addr ");
+  Serial.print(receivedCode.address);
+  
+  if (receivedCode.groupBit) {
+    Serial.print(" group");
+  } else {
+    Serial.print(" unit ");
+    Serial.print(receivedCode.unit);
+  }
+  
+  switch (receivedCode.switchType) {
+    case 0:
+      Serial.print(" off");
+      break;
+    case 1:
+      Serial.print(" on");
+      break;
+    case 2:
+      Serial.print(" dim level");
+      Serial.print(receivedCode.dimLevel);
+      break;
+  }
+  
+  Serial.print(", period: ");
+  Serial.print(receivedCode.period);
+  Serial.println("us.");
+}
+
+
