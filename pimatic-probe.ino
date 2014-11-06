@@ -59,50 +59,65 @@ long codeKit = 1000;  // Your unique ID for your Arduino node
 int Bytes[30]; 
 int BytesData[30]; 
 
-// Start includes
-OneWire oneWire(ONE_WIRE_BUS); // Setup a oneWire instance
-DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Temperature
-dht DHT;
+// Config which modules to use
+boolean DHT11 = true;
+boolean DS18B20 = true;
+boolean ultrasonic = false;
+boolean kaku_proxy = true;
+
+  // Start includes
+  OneWire oneWire(ONE_WIRE_BUS); // Setup a oneWire instance
+  DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Temperature  
+  dht DHT;    
 
 void setup()
 {
   pinMode(senderPin, OUTPUT);
   pinMode(ledPin, OUTPUT);
   buildSignal();
-  
-  sensors.begin(); //start up temp sensor
 
-  // Initialize receiver on interrupt 0 (= digital pin 2), calls the callback "retransmit"
-  NewRemoteReceiver::init(0, 2, retransmit);
+  if (DS18B20) {
+     //start up temp sensor
+    sensors.begin();
+  }
+    
+  if (kaku_proxy) {
+    // Initialize receiver on interrupt 0 (= digital pin 2), calls the callback "retransmit"
+    NewRemoteReceiver::init(0, 2, retransmit);
+  }
 }
 
 void loop()
 {
- // Read DS18B20 and transmit value as sensor 1
- float temperature;
- sensors.requestTemperatures(); // Get the temperature
- temperature = sensors.getTempCByIndex(0); // Get temperature in Celcius
- unsigned long CounterValue = temperature * 10;
- Blink(ledPin,2);  
- int BytesType[] = {0,0,0,1};
- transmit(true, CounterValue, BytesType, 6);
- delay(5000);
+  if (DS18B20) {
+    // Read DS18B20 and transmit value as sensor 1
+    float temperature;
+    sensors.requestTemperatures(); // Get the temperature
+    temperature = sensors.getTempCByIndex(0); // Get temperature in Celcius
+    unsigned long CounterValue = temperature * 10;
+    Blink(ledPin,2);  
+    int BytesType[] = {0,0,0,1};
+    transmit(true, CounterValue, BytesType, 6);
+    delay(5000);
+  }
 
- // Read DHT11 and transmit value as sensor 2
- int chk = DHT.read11(DHT11_PIN);
- switch (chk)
- {
-  case DHTLIB_OK:
-   float humfloat = DHT.humidity;
-   int CounterValue = humfloat * 10;
-   Blink(ledPin,2); 
-   int BytesType[] = {0,0,1,0};
-   transmit(true, CounterValue, BytesType, 6);
-   break;
- }
- delay(60000);
-} 
+  if (DHT11) {
+    // Read DHT11 and transmit value as sensor 2
+    int chk = DHT.read11(DHT11_PIN);
+    switch (chk)
+    {
+      case DHTLIB_OK:
+      float humfloat = DHT.humidity;
+      int CounterValue = humfloat * 10;
+      Blink(ledPin,2); 
+      int BytesType[] = {0,0,1,0};
+      transmit(true, CounterValue, BytesType, 6);
+      break;
+    }
+  }
 
+  delay(60000);
+}
 void itob(unsigned long integer, int length)
 {  
  for (int i=0; i<length; i++){
