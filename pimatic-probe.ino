@@ -65,10 +65,10 @@ boolean DS18B20 = true;
 boolean ultrasonic = false;
 boolean kaku_proxy = true;
 
-  // Start includes
-  OneWire oneWire(ONE_WIRE_BUS); // Setup a oneWire instance
-  DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Temperature  
-  dht DHT;    
+// Start includes
+OneWire oneWire(ONE_WIRE_BUS); // Setup a oneWire instance
+DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Temperature  
+dht DHT;    
 
 void setup()
 {
@@ -155,7 +155,7 @@ void retransmit(NewRemoteCode receivedCode) {
       transmitter.sendUnit(0, receivedCode.switchType);
   }
   
-  // retransmit KaKu sender 12691134-1 (bijkeuken verlichting) as 101010-1
+  // retransmit KaKu sender 12691134-1 (bijkeuken verlichting sender) as 101010-1
   if (receivedCode.address == 12691134 && receivedCode.unit == 1) {  
       Serial.print("Proxy!");
       NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
@@ -168,6 +168,14 @@ void retransmit(NewRemoteCode receivedCode) {
       NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
       transmitter.sendUnit(2, receivedCode.switchType);
   }  
+  
+  // retransmit KaKu receiver 8934706-6 (bijkeuken verlichting receiver) as 101010-3
+  if (receivedCode.address == 8934706 && receivedCode.unit == 6) {  
+      Serial.print("Proxy!");
+      NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
+      transmitter.sendUnit(3, receivedCode.switchType);
+  }  
+  
   
   // Enable the receiver.
   NewRemoteReceiver::enable();
