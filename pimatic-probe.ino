@@ -6,7 +6,7 @@
   RESET             -|  N  |-             RESET
   GND               -|  O  |-   	  5V
   receive        D2 -|     |- A7
-                 D3 -|  V  |- A6      
+  IR-LED         D3 -|  V  |- A6      
   transmit       D4 -|  3  |- A5          SCL
   DS18B20        D5 -|     |- A4          SDA
                  D6 -|     |- A3      
@@ -16,7 +16,8 @@
   SS            D10 -|     |-             AREF
   MOSI          D11 -|     |-             3.3V			
   MISO          D12 -|_____|- D13         LED/SCK
-
+  
+  
 v 0.1    Read temperature from DS18B20 and broadcast with KaKu_dim protocol
 v 0.2    Changed protocol KaKu_dim to Probe protocol
 v 0.3    Added DHT11 humidity transmit
@@ -26,6 +27,7 @@ v 0.4.2  Changed transmit() function with argument number of repeats
 v 0.5    Add NewRemoteSwitch (KaKu) libraries for retransmitting
 v 0.6    Changed Attiny drawing to Nano and changed pin's
 v 0.7    Added KaKu retransmit as proxy
+v 0.8    Added IR retransmit as proxy
 
 
  * Generic Sender code : Send a value (counter) over RF 433.92 mhz
@@ -45,43 +47,92 @@ v 0.7    Added KaKu retransmit as proxy
 #include <dht.h> // http://playground.arduino.cc/Main/DHTLib#.UyMXevldWCQ
 #include <NewRemoteReceiver.h>
 #include <NewRemoteTransmitter.h>
-
+#include <IRremote.h>
 
 // Define vars
 #define DHT11_PIN 9
 #define senderPin 4
 const int ledPin = 8; // LED PIN
 #define ONE_WIRE_BUS 5 // DS18B20 PIN
-
 #define rxPin 2   // RF RECEIVER PIN
 
 long codeKit = 1000;  // Your unique ID for your Arduino node
 int Bytes[30]; 
 int BytesData[30]; 
 
-// Config which modules to use
-boolean DHT11 = true;
-boolean DS18B20 = true;
-boolean ultrasonic = false;
-boolean kaku_proxy = true;
+// Set to 1 for serial output
+boolean debug = 1;
+
+/*
+Config sensors
+0=disable
+1=enable / every loop
+n=run everyth n loop
+*/
+int DS18B20 = 1;
+int DHT11 = 5;
+int kaku_proxy = 1;
+int ir_proxy = 1;
+int LoopDelay = 6000;
+int SensorDelay = 5000;
+
+int DS18B20_i = DS18B20;
+int DHT11_i = DHT11;
+
+unsigned int AClivingON[] = {3420, 1592, 500, 1128, 464, 1160, 460, 372, 464, 372, 412, 424, 456, 1160, 460, 376, 460, 376, 500, 1132, 412, 1212, 456, 376, 456, 1160, 464, 372, 460, 376, 460, 1160, 412, 1208, 504, 348, 456, 1160, 460, 1160, 460, 372, 464, 372, 460, 1160, 464, 372, 460, 376, 496, 1136, 460, 372, 464, 372, 460, 376, 460, 376, 412, 424, 408, 424, 456, 376, 500, 348, 412, 424, 412, 424, 456, 376, 460, 372, 464, 372, 412, 424, 460, 376, 500, 344, 460, 376, 412, 1208, 460, 376, 460, 376, 408, 1212, 408, 424, 412, 424, 496, 1136, 460, 1160, 460, 380, 408, 420, 464, 372, 460, 376, 412, 424, 412, 424, 500, 344, 408, 428, 412, 1208, 412, 1208, 412, 424, 460, 376, 408, 424, 412, 424, 496, 348, 460, 1160, 412, 424, 412, 1208, 412, 1212, 408, 1212, 412, 420, 460, 1160, 500, 348, 408, 428, 408, 424, 412, 424, 456, 376, 460, 376, 408, 428, 408, 424, 504, 340, 412, 424, 412, 424, 460, 376, 412, 424, 408, 428, 408, 424, 456, 376, 500, 348, 412, 424, 456, 376, 408, 428, 408, 424, 412, 424, 412, 424, 412, 424, 496, 348, 412, 424, 412, 424, 408, 428, 456, 372, 460, 376, 412, 424, 412, 424, 500, 344, 408, 1212, 412, 424, 408, 428, 408, 424, 412, 424, 412, 424, 408, 424, 492};
+int AClivingON_len = 227;
+unsigned int AClivingOFF[] = {3420, 1592, 500, 1128, 464, 1160, 460, 372, 464, 372, 412, 424, 456, 1160, 460, 376, 460, 376, 500, 1132, 412, 1212, 456, 376, 456, 1160, 464, 372, 460, 376, 460, 1160, 412, 1208, 504, 348, 456, 1160, 460, 1160, 460, 372, 464, 372, 460, 1160, 464, 372, 460, 376, 496, 1136, 460, 372, 464, 372, 460, 376, 460, 376, 412, 424, 408, 424, 456, 376, 500, 348, 412, 424, 412, 424, 456, 376, 460, 372, 464, 372, 412, 424, 460, 376, 500, 344, 460, 376, 412, 1208, 460, 376, 460, 376, 408, 1212, 408, 424, 412, 424, 496, 1136, 460, 1160, 460, 380, 408, 420, 464, 372, 460, 376, 412, 424, 412, 424, 500, 344, 408, 428, 412, 1208, 412, 1208, 412, 424, 460, 376, 408, 424, 412, 424, 496, 348, 460, 1160, 412, 424, 412, 1208, 412, 1212, 408, 1212, 412, 420, 460, 1160, 500, 348, 408, 428, 408, 424, 412, 424, 456, 376, 460, 376, 408, 428, 408, 424, 504, 340, 412, 424, 412, 424, 460, 376, 412, 424, 408, 428, 408, 424, 456, 376, 500, 348, 412, 424, 456, 376, 408, 428, 408, 424, 412, 424, 412, 424, 412, 424, 496, 348, 412, 424, 412, 424, 408, 428, 456, 372, 460, 376, 412, 424, 412, 424, 500, 344, 408, 1212, 412, 424, 408, 428, 408, 424, 412, 424, 412, 424, 408, 424, 492};
+int AClivingOFF_len = 227;
+
+unsigned int ACbedroomON[] = {7664, 2840, 584, 1360, 584, 1360, 584, 2756, 584, 2756, 580, 2756, 612, 2728, 584, 1360, 612, 2736, 608, 2732, 584, 1360, 584, 1360, 584, 1360, 588, 1360, 584, 1360, 584, 1360, 584, 2760, 584, 2760, 576, 2756, 584, 2760, 584, 2756, 584, 2756, 604, 2732, 584, 2756, 584, 2760, 584, 1360, 584, 2756, 584, 1360, 584, 1364, 584, 1360, 584, 1360, 584, 1360, 580, 1372, 584, 1360, 584, 1360, 584, 1364, 584, 1360, 584, 1360, 612, 1332, 584, 1364, 584, 1364, 584, 1360, 584, 1364, 584, 1364, 580, 1360, 584, 1364, 608, 1336, 584, 1360, 612, 1344, 580, 1364, 608, 1336, 608, 1340, 580, 1360, 584, 1360, 584, 1360, 584, 1368, 608, 1340, 584, 1364, 576, 1368, 580, 1364, 580, 1368, 576, 1368, 580, 1364, 580, 1364, 580, 1372, 612, 1332, 584, 2756, 580, 2756, 584, 2756, 584, 2752, 584, 2756, 584, 1364, 584, 1360, 584};
+int ACbedroomON_len = 147;
+unsigned int ACbedroomOFF[] = {7664, 2840, 584, 1360, 584, 1360, 584, 2756, 584, 2756, 580, 2756, 612, 2728, 584, 1360, 612, 2736, 608, 2732, 584, 1360, 584, 1360, 584, 1360, 588, 1360, 584, 1360, 584, 1360, 584, 2760, 584, 2760, 576, 2756, 584, 2760, 584, 2756, 584, 2756, 604, 2732, 584, 2756, 584, 2760, 584, 1360, 584, 2756, 584, 1360, 584, 1364, 584, 1360, 584, 1360, 584, 1360, 580, 1372, 584, 1360, 584, 1360, 584, 1364, 584, 1360, 584, 1360, 612, 1332, 584, 1364, 584, 1364, 584, 1360, 584, 1364, 584, 1364, 580, 1360, 584, 1364, 608, 1336, 584, 1360, 612, 1344, 580, 1364, 608, 1336, 608, 1340, 580, 1360, 584, 1360, 584, 1360, 584, 1368, 608, 1340, 584, 1364, 576, 1368, 580, 1364, 580, 1368, 576, 1368, 580, 1364, 580, 1364, 580, 1372, 612, 1332, 584, 2756, 580, 2756, 584, 2756, 584, 2752, 584, 2756, 584, 1364, 584, 1360, 584};
+int ACbedroomOFF_len = 147;
+
+
+
 
 // Start includes
 OneWire oneWire(ONE_WIRE_BUS); // Setup a oneWire instance
 DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Temperature  
 dht DHT;    
+IRsend irsend;
 
 void setup()
 {
+  if (debug) {
+    Serial.begin(115200);
+    Serial.print("Congifured values:\n");
+    Serial.print("DS18B20=");
+    Serial.print(DS18B20);
+    Serial.print("\n");
+    Serial.print("DHT11=");
+    Serial.print(DHT11);
+    Serial.print("\n");    
+    Serial.print("kaku_proxy=");
+    Serial.print(kaku_proxy);
+    Serial.print("\n");        
+    Serial.print("ir_proxy=");
+    Serial.print(ir_proxy);
+    Serial.print("\n");        
+    Serial.print("LoopDelay=");
+    Serial.print(LoopDelay);
+    Serial.print("\n");    
+    Serial.print("SensorDelay=");
+    Serial.print(SensorDelay);
+    Serial.print("\n");        
+    Serial.print("\n");        
+  }
   pinMode(senderPin, OUTPUT);
   pinMode(ledPin, OUTPUT);
-  buildSignal();
+  // buildSignal();
 
-  if (DS18B20) {
+  if (DS18B20 != 0) {
      //start up temp sensor
     sensors.begin();
   }
     
-  if (kaku_proxy) {
+  if (kaku_proxy != 0) {
     // Initialize receiver on interrupt 0 (= digital pin 2), calls the callback "retransmit"
     NewRemoteReceiver::init(0, 2, retransmit);
   }
@@ -89,8 +140,16 @@ void setup()
 
 void loop()
 {
-  if (DS18B20) {
+    if (debug) {
+      Serial.print("Start loop\n");
+    }  
+  
+  if (DS18B20 == DS18B20_i) {
+    if (debug) {
+      Serial.print("Read & Send DS18B20\n");
+    }  
     // Read DS18B20 and transmit value as sensor 1
+/*
     float temperature;
     sensors.requestTemperatures(); // Get the temperature
     temperature = sensors.getTempCByIndex(0); // Get temperature in Celcius
@@ -98,10 +157,16 @@ void loop()
     Blink(ledPin,2);  
     int BytesType[] = {0,0,0,1};
     transmit(true, CounterValue, BytesType, 6);
-    delay(5000);
+    delay(SensorDelay);
+*/
+    DS18B20_i = 0;
   }
 
-  if (DHT11) {
+  if (DHT11 == DHT11_i) {
+    if (debug) {
+      Serial.print("Read & Send DHT11\n");
+    }  
+    
     // Read DHT11 and transmit value as sensor 2
     int chk = DHT.read11(DHT11_PIN);
     switch (chk)
@@ -114,9 +179,16 @@ void loop()
       transmit(true, CounterValue, BytesType, 6);
       break;
     }
+    DHT11_i = 0;    
   }
 
-  delay(60000);
+  DS18B20_i ++; 
+  DHT11_i ++;   
+
+  if (debug) {
+    Serial.print("End of loop, sleep . . .\n\n");
+  }  
+  delay(LoopDelay);
 }
 void itob(unsigned long integer, int length)
 {  
@@ -131,6 +203,9 @@ void itob(unsigned long integer, int length)
 
 // Callback function is called only when a valid code is received.
 void retransmit(NewRemoteCode receivedCode) {
+
+        Serial.print("ik ontvang iets! \n");
+
   /*
   receivedCode.address      -> ID
   receivedCode.unit         -> unit
@@ -149,33 +224,72 @@ void retransmit(NewRemoteCode receivedCode) {
   delay(1000);
 
   // retransmit KaKu doorcontact 13040182-9 (tuindeur) as 101010-0
-  if (receivedCode.address == 8934706 && receivedCode.unit == 9) {  
-      Serial.print("Proxy!");
+  if (receivedCode.address == 13040182 && receivedCode.unit == 9) {  
+      Serial.print("retransmit KaKu doorcontact 13040182-9 (tuindeur) as 101010-0");
+      Serial.print(receivedCode.switchType);
+      Serial.print("\n");
       NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
       transmitter.sendUnit(0, receivedCode.switchType);
   }
   
   // retransmit KaKu sender 12691134-1 (bijkeuken verlichting sender) as 101010-1
   if (receivedCode.address == 12691134 && receivedCode.unit == 1) {  
-      Serial.print("Proxy!");
+      Serial.print("retransmit KaKu sender 12691134-1 (bijkeuken verlichting sender) as 101010-1 \n");
+      Serial.print(receivedCode.switchType);
+      Serial.print("\n");      
       NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
       transmitter.sendUnit(1, receivedCode.switchType);
   }  
 
   // retransmit KaKu sender 11221182-9 (Elise verlichting) as 101010-2
   if (receivedCode.address == 11221182 && receivedCode.unit == 9) {  
-      Serial.print("Proxy!");
+      Serial.print("retransmit KaKu sender 11221182-9 (Elise verlichting) as 101010-2 \n");
+      Serial.print(receivedCode.switchType);
+      Serial.print("\n");      
       NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
       transmitter.sendUnit(2, receivedCode.switchType);
   }  
   
   // retransmit KaKu receiver 8934706-6 (bijkeuken verlichting receiver) as 101010-3
   if (receivedCode.address == 8934706 && receivedCode.unit == 6) {  
-      Serial.print("Proxy!");
+      Serial.print("retransmit KaKu receiver 8934706-6 (bijkeuken verlichting receiver) as 101010-3 \n");
+      Serial.print(receivedCode.switchType);
+      Serial.print("\n");
       NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
       transmitter.sendUnit(3, receivedCode.switchType);
   }  
   
+  // retransmit KaKu doorcontact 12991098-9 (testdeur) as 101010-4
+  if (receivedCode.address == 12991098 && receivedCode.unit == 9) {  
+      Serial.print("retransmit KaKu doorcontact 12991098-9 (testdeur) as 101010-4");
+      Serial.print(receivedCode.switchType);
+      Serial.print("\n");
+      NewRemoteTransmitter transmitter(101010, 4, receivedCode.period);    
+      transmitter.sendUnit(4, receivedCode.switchType);
+  }
+  
+  // retransmit KaKu switch 101010-5 OFF as infrared (Airco living)
+  if (receivedCode.address == 101010 && receivedCode.unit == 5 && receivedCode.switchType == 0) {  
+      Serial.print("retransmit KaKu doorcontact 13040182-9 (tuindeur) as 101010-0");
+      Serial.print(receivedCode.switchType);
+      Serial.print("\n");
+      for (int i = 0; i < 2; i++) {
+        irsend.sendRaw(AClivingOFF, AClivingOFF_len, 38);
+        delay(100);
+      }    
+  }
+
+  // retransmit KaKu switch 101010-6 as infrared (Airco living)
+  if (receivedCode.address == 101010 && receivedCode.unit == 5 && receivedCode.switchType == 1) {  
+      Serial.print("retransmit KaKu doorcontact 13040182-9 (tuindeur) as 101010-0");
+      Serial.print(receivedCode.switchType);
+      Serial.print("\n");
+      for (int i = 0; i < 2; i++) {
+        irsend.sendRaw(AClivingON, AClivingON_len, 38);
+        delay(100);
+      }    
+  }
+
   
   // Enable the receiver.
   NewRemoteReceiver::enable();
@@ -203,16 +317,19 @@ unsigned long power2(int power){    //gives 2 to the (power)
 /**
  * Crée notre signal sous forme binaire
 **/
+/*
 void buildSignal()
 {
-  Serial.println(codeKit);
+  Serial.print(codeKit);
   // Converti les codes respectifs pour le signal en binaire
   itob(codeKit, 14);
   for(int j=0;j < 14; j++){
    Serial.print(Bytes[j]);
   }
-  Serial.println();
+  Serial.print();
 }
+
+*/
 
 // Convert 0 in 01 and 1 in 10 (Manchester conversion)
 void sendPair(bool b) {
