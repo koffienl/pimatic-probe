@@ -42,12 +42,12 @@ v 0.8    Added IR retransmit as proxy
  */
 
 // Includes
-#include <OneWire.h> // http://www.pjrc.com/teensy/arduino_libraries/OneWire.zip
-#include <DallasTemperature.h> // http://download.milesburton.com/Arduino/MaximTemperature/DallasTemperature_LATEST.zip
-#include <dht.h> // http://playground.arduino.cc/Main/DHTLib#.UyMXevldWCQ
 #include <NewRemoteReceiver.h>
 #include <NewRemoteTransmitter.h>
 #include <IRremote.h>
+#include <OneWire.h> // http://www.pjrc.com/teensy/arduino_libraries/OneWire.zip
+#include <DallasTemperature.h> // http://download.milesburton.com/Arduino/MaximTemperature/DallasTemperature_LATEST.zip
+#include <dht.h> // http://playground.arduino.cc/Main/DHTLib#.UyMXevldWCQ
 
 // Define vars
 #define DHT11_PIN 9
@@ -58,6 +58,10 @@ v 0.8    Added IR retransmit as proxy
 long codeKit = 666;  // Your unique ID for your Arduino node
 int Bytes[30]; 
 int BytesData[30]; 
+
+int ledPinR = 6;    // Red LED connected to digital pin 6
+int ledPinB = 11;    // Blue LED connected to digital pin 5
+int ledPinG = 10;    // Green LED connected to digital pin 4
 
 // Set to 1 for serial output
 boolean debug = 1;
@@ -72,8 +76,8 @@ int DS18B20 = 1;
 int DHT11 = 1;
 int kaku_proxy = 1;
 int ir_proxy = 1;
-int LoopDelay = 10000;
-int SensorDelay = 1000;
+int LoopDelay = 60000;
+int SensorDelay = 2500;
 
 int DS18B20_i = DS18B20;
 int DHT11_i = DHT11;
@@ -87,43 +91,23 @@ unsigned int aan2[] = {7672, 2836, 584, 1360, 588, 1356, 584, 2760, 584, 2752, 5
 unsigned int uit2[] = {7672, 2840, 584, 1356, 584, 1364, 584, 2756, 584, 2756, 580, 2760, 584, 2752, 584, 1360, 584, 2764, 584, 2752, 584, 1364, 584, 1360, 584, 1364, 584, 1356, 588, 1356, 584, 1364, 584, 1364, 584, 2760, 584, 2752, 584, 2756, 584, 2756, 584, 2756, 580, 2756, 584, 2760, 576, 2764, 584, 1360, 584, 2760, 580, 1360, 584, 1368, 580, 1360, 584, 1360, 584, 1364, 584, 1364, 584, 1364, 584, 1360, 584, 1364, 580, 1360, 584, 1368, 580, 1360, 584, 1364, 584, 1364, 584, 1364, 584, 1360, 584, 1360, 588, 1360, 580, 1364, 580, 1364, 584, 1360, 584, 1368, 584, 1360, 584, 1364, 584, 1360, 584, 1360, 584, 1364, 584, 1360, 580, 1368, 580, 1372, 576, 1368, 580, 1368, 576, 1364, 584, 1360, 584, 1364, 584, 1360, 584, 1360, 580, 1372, 584, 1364, 580, 2756, 584, 2756, 580, 2756, 588, 2756, 580, 2756, 584, 1364, 580, 2756, 584};
 
 // Start includes
+IRsend irsend;
 OneWire oneWire(ONE_WIRE_BUS); // Setup a oneWire instance
 DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Temperature  
 DeviceAddress insideThermometer;
 dht DHT;
-IRsend irsend;
-
 
 void setup()
 {
   if (debug) {
     // Show all configured values
     Serial.begin(115200);
-    Serial.print("Configured values:\n");
-    Serial.print("DS18B20=");
-    Serial.print(DS18B20);
-    Serial.print("\n");
-    Serial.print("DHT11=");
-    Serial.print(DHT11);
-    Serial.print("\n");    
-    Serial.print("kaku_proxy=");
-    Serial.print(kaku_proxy);
-    Serial.print("\n");        
-    Serial.print("ir_proxy=");
-    Serial.print(ir_proxy);
-    Serial.print("\n");        
-    Serial.print("LoopDelay=");
-    Serial.print(LoopDelay);
-    Serial.print("\n");    
-    Serial.print("SensorDelay=");
-    Serial.print(SensorDelay);
-    Serial.print("\n");        
   }
   
   // Define pins
   pinMode(senderPin, OUTPUT);
 
-  if (kaku_proxy != 0) {
+  if (kaku_proxy != 0 || ir_proxy != 0) {
     // Initialize receiver on interrupt 0 (= digital pin 2), calls the callback "retransmit"
     NewRemoteReceiver::init(0, 2, retransmit);
   } 
@@ -132,11 +116,6 @@ void setup()
      //start up temp sensor
     sensors.begin();   
     sensors.getAddress(insideThermometer, 0);
-    if (debug) {
-      Serial.print("DS18B20 found on address: ");
-      printAddress(insideThermometer);
-      Serial.print("\n");
-    }
     int reso = sensors.getResolution(insideThermometer);
     if (reso != 12) {
       if (debug) {
@@ -151,20 +130,17 @@ void setup()
     }
   }
 
+
   // Convert Probe ID to binair
   buildSignal();
 }
 
-
 void loop()
 {
-//  Serial.print("send IR\n");
-//  irsend.sendRaw(AClivingOFF, AClivingOFF_len, 38);
-  
-  
-    if (debug) {
-      Serial.print("Start loop\n");
-    }  
+  if (debug) {
+    Serial.print("Start loop\n");
+  }  
+
   if (DS18B20 == DS18B20_i) {
     if (debug) {
       Serial.print("DS18B20\n");
@@ -174,42 +150,38 @@ void loop()
 
     sensors.requestTemperatures(); // Get the temperature
     float temperature = sensors.getTempCByIndex(0); // Get temperature in Celcius
-    //temperature = temperature - 35.0; 
-    //unsigned long SendTemp;
     int SendTemp;
+    //temperature = temperature - 35.0;     
     
+    if (debug) {
+      Serial.print("\t");
+    }  
+            
     if (temperature >= 0.0) {
-      SendTemp = temperature * 100;      
+      SendTemp = temperature * 100;
       if (debug) {
-        Serial.print("\tTemperature: [Positive] ");
-        Serial.println(SendTemp);        
-        Serial.print("\tStart transmit\n");
-      }  
-      transmit(true, SendTemp, BytesType, 6);
-      if (debug) {
-        Serial.print("\tEnd transmit\n");               
-      }
-    }
-
-    if (temperature < 0.0) {
-      SendTemp = (temperature * 100) * -1;      
-      if (debug) {
-        Serial.print("\tTemperature: [Negative] ");
         Serial.println(SendTemp);
-        Serial.print("\tStart transmit\n");               
-      }  
-      transmit(false, SendTemp, BytesType, 6);
-      if (debug) {
-        Serial.print("\tEnd transmit\n");               
-      }       
+      }        
+      transmit(true, SendTemp, BytesType, 6); 
     }
+    
+    if (temperature < 0.0) {
+      SendTemp = (temperature * 100) * -1;
+      if (debug) {
+        Serial.println(SendTemp);
+      }      
+      transmit(false, SendTemp, BytesType, 6);
+    }
+    
 
     DS18B20_i = 0;
+    delay(SensorDelay);    
   }
-
+  
   if (DHT11 == DHT11_i) {
     if (debug) {
       Serial.print("DHT11\n");
+      Serial.print("\t");      
     }  
     // Read DHT11 and transmit value as sensor 2
     int chk = DHT.read11(DHT11_PIN);
@@ -220,19 +192,15 @@ void loop()
       int CounterValue = humfloat * 10;
       int BytesType[] = {0,0,1,0};
       if (debug) {
-        Serial.print("\tHumidity: ");
         Serial.println(CounterValue);
-        Serial.print("\tStart transmit\n");
-      }
+      }            
       transmit(true, CounterValue, BytesType, 6);
-      if (debug) {
-        Serial.print("\tEnd transmit\n");
-      }
       break;
     }
-    delay(SensorDelay);    
     DHT11_i = 0;    
+    delay(SensorDelay);    
   }
+  
 
 
   DS18B20_i ++; 
@@ -244,8 +212,6 @@ void loop()
   delay(LoopDelay);
 }
   
-
-
 void itob(unsigned long integer, int length)
 {  
  for (int i=0; i<length; i++){
@@ -384,7 +350,6 @@ void transmit(boolean positive, unsigned long Counter, int BytesType[], int repe
  }    
 }
 
-
 // Callback function is called only when a valid code is received.
 void retransmit(NewRemoteCode receivedCode) {
   
@@ -397,34 +362,153 @@ void retransmit(NewRemoteCode receivedCode) {
   */
   
 
-        Serial.print("ik ontvang iets! \n");
   // Disable the receiver; otherwise it might pick up the retransmit as well.
   NewRemoteReceiver::disable();
 
   // Need interrupts for delay()
-  interrupts();
+//  interrupts();
 
-  // Wait 1 second before sending.
-//  delay(1000);
+  // Print the received code.
+  Serial.print("Addr ");
+  Serial.print(receivedCode.address);
   
+  if (receivedCode.groupBit) {
+    Serial.print(" group");
+  } else {
+    Serial.print(" unit ");
+    Serial.print(receivedCode.unit);
+  }
+  
+  switch (receivedCode.switchType) {
+    case 0:
+      Serial.print(" off");
+      break;
+    case 1:
+      Serial.print(" on");
+      break;
+    case 2:
+      Serial.print(" dim level");
+      Serial.print(receivedCode.dimLevel);
+      break;
+  }
+  
+  Serial.print(", period: ");
+  Serial.print(receivedCode.period);
+  Serial.println("us.");
+
+
   if (receivedCode.address == 8934706 && receivedCode.unit == 9 && receivedCode.switchType == 0) {  
-      Serial.print("receive 8934706-9 OFF \n");
-      for (int i = 0; i < 2; i++) {
-        irsend.sendRaw(AClivingOFF, AClivingOFF_len, 38);
-//        irsend.sendRaw(uit2, 147, 38);     
-        delay(100);   
-      }
+    if (debug) {
+      Serial.print("proxy 8934706-9-OFF -> IR \n");
+    }        
+    for (int i = 0; i < 2; i++) {
+      irsend.sendRaw(AClivingOFF, AClivingOFF_len, 38);
+    delay(100);   
+    }
   }
 
 
   if (receivedCode.address == 8934706 && receivedCode.unit == 9 && receivedCode.switchType == 1) {  
-      Serial.print("receive 8934706-9 ON \n");
-      for (int i = 0; i < 2; i++) {
-//        irsend.sendRaw(AClivingON, AClivingON_len, 38);               
-//        irsend.sendRaw(aan2, 147, 38);     
-        delay(100);           
-      }
+    if (debug) {
+      Serial.print("proxy 8934706-9-ON ->IR \n");
+    }        
+    for (int i = 0; i < 2; i++) {
+      irsend.sendRaw(AClivingON, AClivingON_len, 38);               
+      delay(100);           
+    }
   }
+
+
+    if (receivedCode.address == 66 && receivedCode.unit == 6 && receivedCode.switchType == 1) // Unit 66 ID 6 Off signal
+	{  
+	analogWrite(ledPinR, 0); 
+	analogWrite(ledPinG, 0);
+	analogWrite(ledPinB, 0);
+	for(int i = 0; i < 3; i++)
+		{
+  delay(500);
+  Serial.print("Off"); //print to serial
+       // fade in from min to max in increments of 5 points:
+  for(int fadeValue = 0 ; fadeValue <= 255; fadeValue +=1) { 
+    // sets the value (range from 0 to 255):
+    analogWrite(ledPinR, fadeValue);         
+    // wait for 500 milliseconds to see the dimming effect    
+    delay(500);                            
+			} 
+
+  // fade out from max to min in increments of 5 points:
+  for(int fadeValue = 255 ; fadeValue >= 15; fadeValue -=1) { 
+    // sets the value (range from 0 to 255):
+    analogWrite(ledPinR, fadeValue);         
+    // wait for 500 milliseconds to see the dimming effect    
+    delay(500);     
+			}
+		}  
+	}
+  if (receivedCode.address == 66 && receivedCode.unit == 6 && receivedCode.switchType == 0) // Unit 66 ID 6 On signal
+	{
+	analogWrite(ledPinR, 0); 
+	analogWrite(ledPinG, 0);
+	analogWrite(ledPinB, 0);
+	for(int i = 0; i < 3; i++)
+		{
+  delay(500);
+  Serial.print("On"); //print to serial
+       // fade in from min to max in increments of 5 points:
+  for(int fadeValue = 0 ; fadeValue <= 255; fadeValue +=1) { 
+    // sets the value (range from 0 to 255):
+    analogWrite(ledPinB, fadeValue);         
+    // wait for 500 milliseconds to see the dimming effect    
+    delay(500);                            
+  } 
+
+  // fade out from max to min in increments of 5 points:
+  for(int fadeValue = 255 ; fadeValue >= 15; fadeValue -=1) { 
+    // sets the value (range from 0 to 255):
+    analogWrite(ledPinB, fadeValue);         
+    // wait for 500 milliseconds to see the dimming effect    
+    delay(500);     
+			}
+		}  
+	}
+	if (receivedCode.address == 66 && receivedCode.unit == 7 && receivedCode.switchType == 0) // Unit 66 ID 7 On signal
+    {
+	analogWrite(ledPinR, 0); 
+	analogWrite(ledPinG, 0);
+	analogWrite(ledPinB, 0);
+		{
+	BlinkR(ledPinR,10);
+	delay(50);
+		}
+	}
+	if (receivedCode.address == 66 && receivedCode.unit == 7 && receivedCode.switchType == 1) // Unit 66 ID 7 Off signal
+    {
+	analogWrite(ledPinR, 0); 
+	analogWrite(ledPinG, 0);
+	analogWrite(ledPinB, 0);
+		{
+	BlinkRB(ledPinR,10);
+	delay(50);
+		}
+	}
+	if (receivedCode.address == 66 && receivedCode.unit == 8 && receivedCode.switchType == 0) // Unit 66 ID 8 On signal
+	{
+  	analogWrite(ledPinR, 0); 
+	analogWrite(ledPinG, 0);
+	analogWrite(ledPinB, 0);
+	// Glow Pink
+	analogWrite(ledPinR, 255); 
+	analogWrite(ledPinG, 51);
+	analogWrite(ledPinB, 153); 
+	}
+        if (receivedCode.address == 66 && receivedCode.unit == 8 && receivedCode.switchType == 1) // Unit 66 ID 8 Off signal
+	{
+  	analogWrite(ledPinR, 0); 
+	analogWrite(ledPinG, 0);
+	analogWrite(ledPinB, 0);
+	// Glow Green
+	analogWrite(ledPinG, 255);
+	}
 
 
   // Enable the receiver.
@@ -441,3 +525,30 @@ void printAddress(DeviceAddress deviceAddress)
     Serial.print(deviceAddress[i], HEX);
   }
 }
+
+
+void BlinkR(int led, int times) //Unit 66 ID 7 On Blink
+{
+ for (int i=0; i< times; i++)
+ {
+  digitalWrite(ledPinR,HIGH);
+  delay (10000);
+  digitalWrite(ledPinR,LOW);
+  delay (10000);
+ }
+}
+void BlinkRB(int led, int times) //Unit 66 ID 7 Off Blink
+{
+ for (int i=0; i< times; i++)
+ {
+  digitalWrite(ledPinB,HIGH);
+  delay (10000);
+  digitalWrite(ledPinR,HIGH);
+  delay (10000);
+  digitalWrite(ledPinB,LOW);
+  delay (10000);
+  digitalWrite(ledPinR,LOW);
+  delay (10000);
+ }
+}
+
